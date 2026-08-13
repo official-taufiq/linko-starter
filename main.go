@@ -5,8 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -45,7 +44,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
-		logger.Printf("failed to create store: %v", err)
+		logger.Error(fmt.Sprintf("failed to create store: %v", err))
 		return 1
 	}
 	s := newServer(*st, httpPort, cancel, logger)
@@ -58,13 +57,13 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	logger.Println("Linko is shutting down")
+	logger.Debug("Linko is shutting down")
 	if err := s.shutdown(shutdownCtx); err != nil {
-		logger.Printf("failed to shutdown server: %v", err)
+		logger.Error(fmt.Sprintf("failed to shutdown server: %v", err))
 		return 1
 	}
 	if serverErr != nil {
-		logger.Printf("server error: %v", serverErr)
+		logger.Error(fmt.Sprintf("server error: %v", serverErr))
 		return 1
 	}
 	return 0
@@ -72,7 +71,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 type closeFunc func() error
 
-func initializeLogger(logFile string) (*log.Logger, closeFunc, error) {
+func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 	if logFile != "" {
 		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
@@ -81,7 +80,7 @@ func initializeLogger(logFile string) (*log.Logger, closeFunc, error) {
 		}
 
 		bufferedFile := bufio.NewWriterSize(file, 8192)
-		multiWriter := io.MultiWriter(bufferedFile, os.Stderr)
+		// multiWriter := io.MultiWriter(bufferedFile, os.Stderr)
 		close := func() error {
 			if err := bufferedFile.Flush(); err != nil {
 				return fmt.Errorf("Failed to flush log file: %w", err)
@@ -91,9 +90,18 @@ func initializeLogger(logFile string) (*log.Logger, closeFunc, error) {
 			}
 			return nil
 		}
-		return log.New(multiWriter, "", log.LstdFlags), close, nil
+		debugLogger := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})
+		infoLogger := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})
+		multiHandler := slog.NewMultiHandler(debugLogger, infoLogger)
+		return slog.New(multiHandler), close, nil
 	}
 
-	return log.New(os.Stderr, "", log.LstdFlags), func() error { return nil }, nil
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})), func() error { return nil }, nil
 
 }
