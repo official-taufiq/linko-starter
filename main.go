@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -42,8 +43,8 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 			fmt.Fprintf(os.Stderr, "Failed to open log file: %v", err)
 		}
 		defer file.Close()
-
-		multiWriter := io.MultiWriter(file, os.Stderr)
+		bufferedFile := bufio.NewWriterSize(file, 8192)
+		multiWriter := io.MultiWriter(bufferedFile, os.Stderr)
 		initializeLogger = log.New(multiWriter, "", log.LstdFlags)
 	} else {
 		initializeLogger = log.New(os.Stderr, "", log.LstdFlags)
