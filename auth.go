@@ -44,7 +44,7 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		if !ok {
-			HttpError(r.Context(), w, http.StatusUnauthorized, err)
+			HttpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 			return
 		}
 		r = r.WithContext(context.WithValue(r.Context(), UserContextKey, username))

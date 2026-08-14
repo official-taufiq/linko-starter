@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 )
@@ -56,17 +58,17 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			logCtx := &LogContext{}
 			r = r.WithContext(context.WithValue(r.Context(), logContextKey, logCtx))
-
 			next.ServeHTTP(spyWriter, r)
 
 			attrs := []any{
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.String("client_ip", r.RemoteAddr),
+				slog.String("client_ip", redactIP(r.RemoteAddr)),
 				slog.Duration("duration", time.Since(start)),
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 				slog.Int("response_status", spyWriter.statusCode),
 				slog.Int("response_body_bytes", spyWriter.bytesWritten),
+				slog.String("request_id", spyWriter.Header().Get("X-Request-ID")),
 			}
 
 			if logCtx.Username != "" {
@@ -78,4 +80,19 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			logger.Info("Served request", attrs...)
 		})
 	}
+}
+
+func redactIP(ipAddr string) string {
+	host := ipAddr
+	if splitHost, _, err := net.SplitHostPort(ipAddr); err == nil {
+		host = splitHost
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil || ip.To4() == nil {
+		return ipAddr
+	}
+
+	ipv4 := ip.To4()
+	return fmt.Sprintf("%d.%d.%d.x", ipv4[0], ipv4[1], ipv4[2])
 }

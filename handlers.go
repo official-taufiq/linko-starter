@@ -37,7 +37,7 @@ func (s *server) handlerLogin(w http.ResponseWriter, r *http.Request) {
 func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(UserContextKey).(string)
 	if !ok || user == "" {
-		HttpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
+		HttpError(r.Context(), w, http.StatusUnauthorized, errors.New("unauthorized"))
 		return
 	}
 	longURL := r.FormValue("url")

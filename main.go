@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -15,7 +14,11 @@ import (
 	"boot.dev/linko/internal/build"
 	"boot.dev/linko/internal/linkoerr"
 	"boot.dev/linko/internal/store"
+	"github.com/mattn/go-isatty"
 	pkgerr "github.com/pkg/errors"
+
+	"github.com/lmittmann/tint"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func main() {
@@ -84,27 +87,41 @@ type closeFunc func() error
 
 func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 	if logFile != "" {
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
+		// file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		// if err != nil {
 
-			return nil, nil, fmt.Errorf("Failed to open log file: %w", err)
+		// 	return nil, nil, fmt.Errorf("Failed to open log file: %w", err)
+		// }
+
+		// bufferedFile := bufio.NewWriterSize(file, 8192)
+		// multiWriter := io.MultiWriter(bufferedFile, os.Stderr)
+		logger := &lumberjack.Logger{
+			Filename:   logFile,
+			MaxSize:    1,
+			MaxAge:     28,
+			MaxBackups: 10,
+			LocalTime:  false,
+			Compress:   true,
 		}
 
-		bufferedFile := bufio.NewWriterSize(file, 8192)
-		// multiWriter := io.MultiWriter(bufferedFile, os.Stderr)
 		close := func() error {
-			if err := bufferedFile.Flush(); err != nil {
-				return fmt.Errorf("Failed to flush log file: %w", err)
-			}
-			if err := file.Close(); err != nil {
-				return fmt.Errorf("Failed to close log file: %w", err)
+			// if err := bufferedFile.Flush(); err != nil {
+			// 	return fmt.Errorf("Failed to flush log file: %w", err)
+			// }
+			// if err := file.Close(); err != nil {
+			// 	return fmt.Errorf("Failed to close log file: %w", err)
+			// }
+			err := logger.Close()
+			if err != nil {
+				return err
 			}
 			return nil
 		}
-		debugLogger := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		debugLogger := tint.NewTextHandler(os.Stderr, &tint.Options{
 			ReplaceAttr: replaceAttr,
+			NoColor:     !(isatty.IsCygwinTerminal(os.Stdout.Fd()) || isatty.IsTerminal(os.Stdout.Fd())),
 		})
-		infoLogger := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+		infoLogger := slog.NewJSONHandler(logger, &slog.HandlerOptions{
 			ReplaceAttr: replaceAttr,
 		})
 		multiHandler := slog.NewMultiHandler(debugLogger, infoLogger)
