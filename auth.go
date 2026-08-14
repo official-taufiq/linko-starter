@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
-	pkgerr "github.com/pkg/errors"
-	"golang.org/x/crypto/bcrypt"
+	"fmt"
 	"log/slog"
 	"net/http"
+
+	pkgerr "github.com/pkg/errors"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type contextKey string
@@ -24,12 +26,12 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, ok := r.BasicAuth()
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			HttpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("Unauthorized"))
 			return
 		}
 		stored, exists := allowedUsers[username]
 		if !exists {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			HttpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("User not allowed"))
 			return
 		}
 		ok, err := s.validatePassword(password, stored)
@@ -38,14 +40,18 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 				slog.String("user", username),
 				slog.Any("error", err),
 			)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			HttpError(r.Context(), w, http.StatusInternalServerError, err)
 			return
 		}
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			HttpError(r.Context(), w, http.StatusUnauthorized, err)
 			return
 		}
 		r = r.WithContext(context.WithValue(r.Context(), UserContextKey, username))
+		logCtx, ok := r.Context().Value(logContextKey).(*LogContext)
+		if ok {
+			logCtx.Username = username
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -56,7 +62,6 @@ func (s *server) validatePassword(password, stored string) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		// s.logger.Error("error validating password", slog.Any("error", err))
 		return false, pkgerr.WithStack(err)
 	}
 	return true, nil
