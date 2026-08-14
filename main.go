@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -11,7 +12,10 @@ import (
 	"syscall"
 	"time"
 
+	"boot.dev/linko/internal/build"
+	"boot.dev/linko/internal/linkoerr"
 	"boot.dev/linko/internal/store"
+	pkgerr "github.com/pkg/errors"
 )
 
 func main() {
@@ -34,7 +38,14 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize Logger: %v\n", err)
 	}
-
+	env := os.Getenv("ENV")
+	hostname, _ := os.Hostname()
+	logger = logger.With(
+		slog.String("git_sha", build.GitSHA),
+		slog.String("build_time", build.BuildTime),
+		slog.String("env", env),
+		slog.String("hostname", hostname),
+	)
 	defer func() {
 		err := closeLogger()
 		if err != nil {
@@ -105,13 +116,46 @@ func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 	})), func() error { return nil }, nil
 
 }
+
+type stackTracer interface {
+	error
+	StackTrace() pkgerr.StackTrace
+}
+type multiError interface {
+	error
+	Unwrap() []error
+}
+
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 	if a.Key == "error" {
-		err, ok := a.Value.Any().(error)
-		if !ok {
-			return a
+		if v, ok := a.Value.Any().(error); ok {
+			if me, ok := a.Value.Any().(multiError); ok {
+				var errAttrs []slog.Attr
+				for i, err := range me.Unwrap() {
+					er := errorAttrs(err)
+					errAttrs = append(errAttrs, slog.GroupAttrs(fmt.Sprintf("error_%d", i+1), er...))
+				}
+				return slog.GroupAttrs("errors", errAttrs...)
+			}
+			return slog.GroupAttrs("error", errorAttrs(v)...)
+
 		}
-		return slog.String("error", fmt.Sprintf("%+v", err))
 	}
 	return a
+}
+func errorAttrs(err error) []slog.Attr {
+	slogAttrs := linkoerr.Attrs(err)
+	slogAttrs = append(slogAttrs, slog.Attr{
+		Key:   "message",
+		Value: slog.StringValue(err.Error()),
+	})
+	if stackErr, ok := errors.AsType[stackTracer](err); ok {
+
+		slogAttrs = append(slogAttrs, slog.Attr{
+			Key:   "stack_trace",
+			Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
+		})
+	}
+
+	return slogAttrs
 }
