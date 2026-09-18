@@ -59,6 +59,9 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			logCtx := &LogContext{}
 			r = r.WithContext(context.WithValue(r.Context(), logContextKey, logCtx))
 			next.ServeHTTP(spyWriter, r)
+			if spyWriter.statusCode == 0 {
+				spyWriter.statusCode = http.StatusOK
+			}
 
 			attrs := []any{
 				slog.String("method", r.Method),
