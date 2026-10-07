@@ -26,12 +26,12 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, ok := r.BasicAuth()
 		if !ok {
-			HttpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("Unauthorized"))
+			HTTPError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("Unauthorized"))
 			return
 		}
 		stored, exists := allowedUsers[username]
 		if !exists {
-			HttpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("User not allowed"))
+			HTTPError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("user not allowed"))
 			return
 		}
 		ok, err := s.validatePassword(password, stored)
@@ -40,11 +40,11 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 				slog.String("user", username),
 				slog.Any("error", err),
 			)
-			HttpError(r.Context(), w, http.StatusInternalServerError, err)
+			HTTPError(r.Context(), w, http.StatusInternalServerError, err)
 			return
 		}
 		if !ok {
-			HttpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
+			HTTPError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 			return
 		}
 		r = r.WithContext(context.WithValue(r.Context(), UserContextKey, username))

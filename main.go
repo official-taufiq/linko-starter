@@ -16,15 +16,13 @@ import (
 	"boot.dev/linko/internal/build"
 	"boot.dev/linko/internal/linkoerr"
 	"boot.dev/linko/internal/store"
+	"github.com/lmittmann/tint"
 	"github.com/mattn/go-isatty"
 	pkgerr "github.com/pkg/errors"
-
-	"github.com/lmittmann/tint"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func main() {
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 	httpPort := flag.Int("port", 8899, "port to listen on")
@@ -38,7 +36,6 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-
 	logger, closeLogger, err := initializeLogger(os.Getenv("LINKO_LOG_FILE"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize Logger: %v\n", err)
@@ -134,7 +131,6 @@ func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 		Level:       slog.LevelDebug,
 		ReplaceAttr: replaceAttr,
 	})), func() error { return nil }, nil
-
 }
 
 type stackTracer interface {
@@ -178,6 +174,7 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 	}
 	return a
 }
+
 func errorAttrs(err error) []slog.Attr {
 	slogAttrs := linkoerr.Attrs(err)
 	slogAttrs = append(slogAttrs, slog.Attr{
@@ -185,7 +182,6 @@ func errorAttrs(err error) []slog.Attr {
 		Value: slog.StringValue(err.Error()),
 	})
 	if stackErr, ok := errors.AsType[stackTracer](err); ok {
-
 		slogAttrs = append(slogAttrs, slog.Attr{
 			Key:   "stack_trace",
 			Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
